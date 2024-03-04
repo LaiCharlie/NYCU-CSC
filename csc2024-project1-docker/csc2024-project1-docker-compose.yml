@@ -1,0 +1,54 @@
+version: '3'
+services:
+  h1:
+    image: csc2024-project1
+    container_name: client
+    privileged: true
+    build:
+      context: .
+      dockerfile: csc2024-project1.Dockerfile
+    cap_add:
+      - NET_ADMIN
+      - NET_BROADCAST
+    networks:
+      IPSec:
+        ipv4_address: 172.18.1.1
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        mv bin/client client && \ 
+        /usr/sbin/sshd -D &
+        scripts/config.sh client &
+        sleep infinity
+    ports:
+      - "4444:22"
+
+  h2:
+    image: csc2024-project1
+    container_name: server
+    privileged: true
+    build:
+      context: .
+      dockerfile: csc2024-project1.Dockerfile
+    cap_add:
+      - NET_ADMIN
+      - NET_BROADCAST
+    networks:
+      IPSec:
+        ipv4_address: 172.18.100.254
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        mv bin/server server && \
+        /usr/sbin/sshd -D &
+        scripts/config.sh server &
+        sleep infinity
+    ports:
+      - "3333:22"
+
+networks:
+  IPSec:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.18.0.0/16
