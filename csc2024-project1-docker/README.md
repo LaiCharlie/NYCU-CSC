@@ -15,6 +15,7 @@ sudo docker build -t csc2024-project1 -f csc2024-project1.Dockerfile .
 
 Run the server and client with
 (If there is already a docker network of 172.18.0.0/16 in your environment, delete it at first)
+
 Otherwise, you will encounter the error below:
  ✘ Network csc2024-project1-docker_IPSec  Error                                                                    0.0s
 failed to create network csc2024-project1-docker_IPSec: Error response from daemon: Pool overlaps with other one on this address space
