@@ -26,6 +26,8 @@ std::optional<ESPConfig> getConfigFromSADB() {
   // TODO: Set size to number of bytes in response message
   int size = message.size();
 
+  // std::cerr << "Test modify" << std::endl;
+
   // Has SADB entry
   if (size != sizeof(sadb_msg)) {
     ESPConfig config{};
