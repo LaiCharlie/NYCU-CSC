@@ -130,8 +130,8 @@ void print_sadb_msg(struct sadb_msg *msg, int msglen) {
 
 	while (msglen > 0) {
 		switch (ext->sadb_ext_type) {
-			case SADB_EXT_RESERVED:	p
-				rintf(" Reserved Extension\n"); break;
+			case SADB_EXT_RESERVED:	
+				printf(" Reserved Extension\n");break;
 			case SADB_EXT_SA:	    
 				sa_print(ext);                  break;
 			case SADB_EXT_LIFETIME_CURRENT:
