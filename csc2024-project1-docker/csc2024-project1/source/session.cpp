@@ -328,6 +328,9 @@ int Session::encapsulateESP(std::span<uint8_t> buffer, const std::string& payloa
   // TODO: Calculate padding size and do padding in `endBuffer`
   uint8_t padSize = 0;
   padSize = (8 - ((payloadLength % 4) + 2)) % 4;
+  for (int i = 0; i < padSize; i++) {
+    endBuffer[i] = i + 1;
+  }
 
   // ESP trailer
   endBuffer[padSize]     = padSize;     // padlen
