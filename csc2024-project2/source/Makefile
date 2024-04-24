@@ -6,10 +6,10 @@ all: mitm_attack pharm_attack
 	echo 0 | sudo tee /proc/sys/net/ipv4/conf/*/send_redirects
 
 mitm_attack: mitm_attack.cpp
-	sudo $(CC) $(CFLAGS) -o mitm_attack mitm_attack.cpp -lpthread
+	sudo $(CC) $(CFLAGS) -o mitm_attack mitm_attack.cpp -lpthread -lnetfilter_queue -w
 
 pharm_attack: pharm_attack.cpp
-	sudo $(CC) $(CFLAGS) -o pharm_attack pharm_attack.cpp -lpthread -lnetfilter_queue
+	sudo $(CC) $(CFLAGS) -o pharm_attack pharm_attack.cpp -lpthread -lnetfilter_queue -w
 
 clean:
 	sudo rm -f mitm_attack pharm_attack

