@@ -1,0 +1,46 @@
+version: '3'
+services:
+  h1:
+    image: csc2024-project3
+    container_name: attacker
+    privileged: true
+    build:
+      context: .
+      dockerfile: csc2024-project3.Dockerfile
+    cap_add:
+      - NET_ADMIN
+      - NET_BROADCAST
+    networks:
+      Ransomware:
+        ipv4_address: 172.18.0.2
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        /usr/sbin/sshd -D &
+        sleep infinity
+
+  h2:
+    image: csc2024-project3
+    container_name: victim
+    privileged: true
+    build:
+      context: .
+      dockerfile: csc2024-project3.Dockerfile
+    cap_add:
+      - NET_ADMIN
+      - NET_BROADCAST
+    networks:
+      Ransomware:
+        ipv4_address: 172.18.0.3
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        /usr/sbin/sshd -D &
+        sleep infinity
+
+networks:
+  Ransomware:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.18.0.0/16
