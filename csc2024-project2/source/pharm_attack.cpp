@@ -283,7 +283,7 @@ uint16_t calculate_udp_checksum(const uint8_t *buf, size_t len, uint32_t src_ip,
     uint32_t sum = 0;
     
     // Pseudo-header
-    sum += (src_ip >> 16) & 0xFFFF; // Source IP High 16 bits
+    sum += (src_ip >> 16) & 0xFFFF;  // Source IP High 16 bits
     sum += src_ip & 0xFFFF;          // Source IP Low 16 bits
     sum += (dest_ip >> 16) & 0xFFFF; // Destination IP High 16 bits
     sum += dest_ip & 0xFFFF;         // Destination IP Low 16 bits
