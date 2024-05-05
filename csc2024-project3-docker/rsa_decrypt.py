@@ -1,12 +1,10 @@
 import sys
 import pickle
 
-Usage = f'''
-python3 {__file__} <n> <d> <file>
-'''
-n = int(sys.argv[1])
-d = int(sys.argv[2])
-filename = sys.argv[3]
+e = 65535
+n = 22291846172619859445381409012451
+d = 14499309299673345844676003563183
+filename = "Pictures/simple_pic.jpg"
 
 with open(filename, 'rb') as f:
     cipher_int = pickle.load(f)
