@@ -1,6 +1,6 @@
 all:
-	chmod 777 attack_server.py
-	chmod 777 crack_attack.py
+	chmod 777 attack_server
+	chmod 777 crack_attack
 	cp ~/../bin/ls ./lst
 	zip -j ls.zip lst
 	rm lst
