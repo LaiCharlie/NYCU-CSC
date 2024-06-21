@@ -10,5 +10,5 @@
 ### Project III: Ransomware Propagation and Payload
 > score : 100
 
-### Project 4: Capture The Flag (CTF)
+### Project IV: Capture The Flag (CTF)
 > score : 100 * 0.75 = 75
