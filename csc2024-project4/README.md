@@ -1,15 +1,15 @@
 # CSC Project4 - Capture The Flag (CTF)
 
 > server ip : 140.113.24.241  
-> server port:  
-- |   Task   | Prob name       | score | server port  | 
-- |----------|-----------------|-------|--------------|  
-- |Task I-1: | Flag Shop       | (20%) | port : 30170 |    
-- |Task I-2: | Magic           | (20%) | port : 30171 |   
-- |Task I-3: | Ret2libc        | (20%) | port : 30173 |   
-- |Task I-4: | Matryoshka Doll | (20%) | locally solve |   
-- |Task II-1:| FMT             | (10%) | port : 30172 |  
-- |Task II-2:| Hello System    | (10%) | port : 30174 |   
+> server port:
+|   Task   | Prob name       | score | server port  | 
+|----------|-----------------|-------|--------------|  
+| Task I-1   | Flag Shop       | (20%) | port : 30170 |    
+| Task I-2   | Magic           | (20%) | port : 30171 |   
+| Task I-3   | Ret2libc        | (20%) | port : 30173 |   
+| Task I-4   | Matryoshka Doll | (20%) | locally solve |   
+| Task II-1  | FMT             | (10%) | port : 30172 |  
+| Task II-2  | Hello System    | (10%) | port : 30174 |   
 
 ### The docker commands  
 
