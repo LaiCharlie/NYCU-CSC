@@ -21,7 +21,7 @@ cd ../home/csc2024/id
 ```
 
 > Note:  
-> I added `volumes: - ./source:/home/csc2024/id` into the yml file, so that the folder `id` in the docker is shared with our environment.
+> I added `volumes: - ./source:/home/csc2024/id` into the yml file, so that the folder `id` in the docker is synchronize with our environment.
 
 ### ----- run victim -----
 ```bash
