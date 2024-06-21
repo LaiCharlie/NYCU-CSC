@@ -96,7 +96,7 @@ print(p.recv())
 # 3. 修改 setvbuf.GOT  為 puts@plt
 # 4. 修改 FILE * stdin 為 read@got （FILE * stdin 是 setvbuf 的第一個參數）
 # 5. call setvbuf (puts) in main -> leak libc base address of read
-# 6. 因為 stack 壞了，所以要 Make execve('/bin/sh', 0, 0) (system() 會檢查 stack)
+# 6. 因為 stack 的 RBP, RSP chain 壞了，所以要 Make execve('/bin/sh', 0, 0) (system() 會檢查 stack)
 
 
 # -------------------------------------
