@@ -7,13 +7,13 @@
 > 1. **Task I: 20%**
     Obtain all other client devices’ IP/MAC addresses in a connected Wi-Fi network
 
-> 3. **Task II: 15%**
+> 2. **Task II: 15%**
     ARP spoofing for all other client devices in the Wi-Fi network
 
-> 5. **Task III: 15%**
+> 3. **Task III: 15%**
     Fetch the inputted username/password strings from HTTP sessions
 
-> 7. **(10%)** One implementation question during the demo 
+> 4. **(10%)** One implementation question during the demo 
 
 
 #### > **solution** : source/mitm_attack.cpp
@@ -23,19 +23,19 @@
 
 > 1. Obtain all other client devices’ IP/MAC addresses in a connected Wi-Fi network
 
-> 3. **Task IV: 30%**
+> 2. **Task IV: 30%**
     DNS spoofing attack for web services
 
-> 5. **(10%)** One implementation question during the demo
+> 3. **(10%)** One implementation question during the demo
 
 
 #### > **solution** : source/pharm_attack.cpp
 
 
 > Note:
-> 
+
 > After `make` attacker the service ip_forward is open and send_redirects is closed, so that the ARP spoofing can work successfully.
-> 
+
 > The program **mitm_attack** will update the arp table of attacker immediately.
->
+
 > running mitm_attack and pharm_attack's command: `sudo ./mitm_attack` and  `sudo ./pharm_attack`.
