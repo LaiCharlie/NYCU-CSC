@@ -1,6 +1,7 @@
 # CSC Project4 - Capture The Flag (CTF)
 
-> server ip : 140.113.24.241  
+> practice server ip : 140.113.24.241
+> demo server ip : 140.113.207.231
 > server port:
 
 |   Task   | Prob name       | score | server port  |  
