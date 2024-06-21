@@ -15,7 +15,7 @@
 
 ### The docker commands  
 
-> The `Dockerfile` is come from INP, replace all **clai** into your username, replace **sence** into your password  
+> The `Dockerfile` is come from INP, replace all **clai** into your username, replace **sense** into your password  
 > **The docker environment is not same as the server**
 ```bash
 docker network prune
