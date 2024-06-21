@@ -11,4 +11,5 @@
 > score : 100
 
 ### Project IV: Capture The Flag (CTF)
-> score : 100 * 0.75 = 75
+> score : 100 * 0.75 = 75    
+> (makeup submission : origin_score * 0.75)
