@@ -22,4 +22,4 @@
 > Note:  
 > After `make` attacker the service ip_forward is open and send_redirects is closed, so that the ARP spoofing can work successfully.  
 > The program **mitm_attack** will update the arp table of attacker immediately.   
-> running mitm_attack and pharm_attack's command: `sudo ./mitm_attack` and  `sudo ./pharm_attack`.  
+> running command: `sudo ./mitm_attack` and  `sudo ./pharm_attack`.  
