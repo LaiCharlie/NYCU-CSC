@@ -2,8 +2,9 @@
 
 > server ip : 140.113.24.241  
 > server port:
-|   Task   | Prob name       | score | server port  | 
-|----------|-----------------|-------|--------------|  
+
+|   Task   | Prob name       | score | server port  |  
+|----------|-----------------|-------|--------------|   
 | Task I-1   | Flag Shop       | (20%) | port : 30170 |    
 | Task I-2   | Magic           | (20%) | port : 30171 |   
 | Task I-3   | Ret2libc        | (20%) | port : 30173 |   
